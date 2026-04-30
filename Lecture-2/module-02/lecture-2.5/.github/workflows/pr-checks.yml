@@ -1,0 +1,122 @@
+# ============================================================
+# LECTURE 2.5 — Early CI: fmt + validate on every PR
+# ============================================================
+#
+# WHY ADD CI IN MODULE 2, NOT MODULE 8?
+#   Cost of fixing errors at PR stage:   2 minutes
+#   Cost of fixing errors in production: 2 hours (+ incident)
+#   Shift left — catch problems as early as possible.
+#
+# This workflow runs on EVERY pull request that changes .tf files.
+# Two gates: formatting + validation. Both must pass before merge.
+#
+# NO GCP credentials needed here:
+#   fmt   → pure text check, no API calls
+#   init  → with -backend=false, skips remote state auth
+#   validate → static type check, no API calls
+# ============================================================
+
+name: "Terraform PR Checks"
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "**.tf"           # only run when Terraform files change
+      - "**.tfvars"       # or when variable files change
+      - ".github/workflows/pr-checks.yml" # or this workflow itself
+
+env:
+  TF_VERSION: "1.7.5"   # pin exact version — same as team uses locally
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # JOB 1: FORMAT CHECK
+  # ──────────────────────────────────────────────────────────
+  # terraform fmt enforces canonical HCL style.
+  # -check flag: exits non-zero if ANY file is unformatted.
+  # -recursive: checks all subdirectories (for module repos).
+  #
+  # Fix locally with: terraform fmt -recursive
+  # ──────────────────────────────────────────────────────────
+  format:
+    name: "Terraform Format Check"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Check formatting
+        id: fmt
+        run: terraform fmt -check -recursive
+        # If this fails:
+        #   cd to repo root and run: terraform fmt -recursive
+        #   Then commit the reformatted files.
+
+      - name: Comment on PR if fmt fails
+        if: failure() && steps.fmt.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Terraform fmt check failed.**\n\nFix locally:\n```bash\nterraform fmt -recursive\ngit add -A && git commit -m "style: terraform fmt"\n```'
+            })
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 2: VALIDATE
+  # ──────────────────────────────────────────────────────────
+  # terraform validate:
+  #   → checks syntax correctness
+  #   → checks type constraints (variable types)
+  #   → checks required arguments exist
+  #   → no network calls, runs in ~1 second
+  #
+  # -backend=false: skips GCS backend auth
+  # This means NO GCP credentials are needed in this job.
+  # ──────────────────────────────────────────────────────────
+  validate:
+    name: "Terraform Validate"
+    runs-on: ubuntu-latest
+    needs: format  # only run validate if format passes
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init (no backend)
+        run: terraform init -backend=false
+        # -backend=false: skips backend initialization
+        # Downloads provider plugins but doesn't connect to GCS state.
+        # This is safe to run with zero GCP credentials.
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Comment validation result on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const outcome = '${{ steps.validate.outcome }}';
+            const icon = outcome === 'success' ? '✅' : '❌';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `${icon} **Terraform Validate**: ${outcome}`
+            })

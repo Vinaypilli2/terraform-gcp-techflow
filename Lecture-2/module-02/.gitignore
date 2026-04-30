@@ -1,0 +1,48 @@
+# ============================================================
+# .gitignore — COMMIT THIS FILE BEFORE YOUR FIRST COMMIT
+# ============================================================
+# If you forget this and push sensitive files → ROTATE immediately.
+# Even a private repo is not safe — token leaks expose everything.
+# ============================================================
+
+# Terraform state — contains passwords, IPs, in PLAIN TEXT
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Local .terraform directory — provider binaries (large, regeneratable)
+**/.terraform/
+
+# .tfvars files with real values — supply via CI secrets instead
+# *.tfvars   ← uncomment if you use tfvars for real secrets
+# *.tfvars.json
+
+# Override files — local personal overrides, not for team
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Terraform plan files — can contain sensitive data
+*.tfplan
+tfplan
+
+# CLI config file
+.terraformrc
+terraform.rc
+
+# macOS junk
+.DS_Store
+
+# VSCode settings (optional — keep if team shares settings)
+# .vscode/
+
+# SSH private keys — should NEVER be in any repo
+*.pem
+*.key
+id_rsa
+id_ed25519
