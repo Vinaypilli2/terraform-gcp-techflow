@@ -1,0 +1,29 @@
+name: Terraform PR checks
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**.tf'
+
+jobs:
+
+  format:
+    name: Terraform fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive
+
+  validate:
+    needs: format
+    name: Terraform validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Initialize Terraform
+        run: terraform init -backend=false
+      - name: Validate Terraform configuration
+        run: terraform validate       
